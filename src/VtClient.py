@@ -3,9 +3,10 @@ import asyncio
 import concurrent.futures
 import json
 import functools
+import os
 
 class VtClient:
-    def __init__(self, vtkey):
+    def __init__(self, vtkey, dlDirectory="downloads"):
         self.session = requests.Session()
         rqAdapters = requests.adapters.HTTPAdapter(pool_connections=16, pool_maxsize=20, max_retries=2)
         self.session.mount("https://", rqAdapters)
@@ -14,6 +15,7 @@ class VtClient:
                 "User-Agent" : "gzip,  My Python requests library example client or username"
         })
         self.vtkey = vtkey
+        self.dlDir = dlDirectory
     
 
     def report(self, hashval):
@@ -54,6 +56,51 @@ class VtClient:
             reports.update(loop.run_until_complete(self._yield_reports(group)))
         return reports
 
+    
+    def search(self, query):
+        hashes = []
+
+        url = "https://www.virustotal.com/vtapi/v2/file/search"
+        params = {"apikey": self.vtkey, "query": query}
+        while True:
+            resp = self.session.post(url, data=params)
+            if resp.status_code == 200:
+                res = resp.json()
+                hashes.extend(res.get("hashes"))
+                if not res.get("offset"):
+                    break
+                params.update({"offset": res.get("offset")})
+
+        return hashes 
+
+    def dl(self, hashval):
+        url = "https://www.virustotal.com/vtapi/v2/file/download"
+        params = {"apikey":self.vtkey, "hash": hashval}
+        resp = self.session.get(url, params=params)
+        if resp.status_code == 200:
+            with open("downloads/{0}".format(hashval), "wb") as fout:
+                fout.write(resp.content)
+    
+    async def _yield_downloads(self, hashlist):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+            loop = asyncio.get_event_loop()
+            futures = [
+                loop.run_in_executor(
+                    executor,
+                    functools.partial(self.dl, hashlist[ind])
+                )
+            for ind in range(0, len(hashlist)) if hashlist[ind]]
+        
+        await asyncio.gather(*futures)
+
+    def download(self, hashlist):
+        CHUNK = 16
+        loop = asyncio.get_event_loop()
+        if not os.path.exists(self.dlDir):
+            os.makedirs(self.dlDir)
+        for ind in range(0, len(hashlist), CHUNK):
+            group = hashlist[ind:ind+CHUNK]
+            loop.run_until_complete(self._yield_downloads(group))
 
 
 
