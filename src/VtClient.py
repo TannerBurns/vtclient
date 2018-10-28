@@ -18,7 +18,7 @@ class VtClient:
 
     def report(self, hashval):
         url = 'https://www.virustotal.com/vtapi/v2/file/report'
-        params = {"apikey": self.vtkey, "resource": hashval}
+        params = {"apikey": self.vtkey, "resource": hashval, "allinfo":1}
         return self.session.get(url, params=params)
     
     async def _yield_reports(self, hashlist):
@@ -45,10 +45,12 @@ class VtClient:
     
     def reports(self, hashlist):
         CHUNK = 16
+        RESOURCE_CHUNK = 24
         loop = asyncio.get_event_loop()
         reports = {}
-        for ind in range(0, len(hashlist), CHUNK):
-            group = hashlist[ind:ind+CHUNK]
+        resource_groups = [",".join(hashlist[ind:ind+RESOURCE_CHUNK]) for ind in range(0, len(hashlist), RESOURCE_CHUNK)]
+        for ind in range(0, len(resource_groups), CHUNK):
+            group = resource_groups[ind:ind+CHUNK]
             reports.update(loop.run_until_complete(self._yield_reports(group)))
         return reports
 
