@@ -49,12 +49,17 @@ class VtClient:
         CHUNK = 16
         RESOURCE_CHUNK = 24
         loop = asyncio.get_event_loop()
-        reports = {}
         resource_groups = [",".join(hashlist[ind:ind+RESOURCE_CHUNK]) for ind in range(0, len(hashlist), RESOURCE_CHUNK)]
         for ind in range(0, len(resource_groups), CHUNK):
             group = resource_groups[ind:ind+CHUNK]
-            reports.update(loop.run_until_complete(self._yield_reports(group)))
-        return reports
+            resp = {}
+            for k,v in loop.run_until_complete(self._yield_reports(group)).items():
+                if len(k.split(",")) > 1:
+                    for r in v:
+                        resp.update({r.get("sha256"):r})
+                else:
+                    resp.update({k:v})
+            yield resp
 
     
     def search(self, query):
