@@ -62,7 +62,7 @@ class VtClient:
             yield resp
 
     
-    def search(self, query):
+    def search(self, query, maxresults=None):
         hashes = []
 
         url = "https://www.virustotal.com/vtapi/v2/file/search"
@@ -74,12 +74,17 @@ class VtClient:
                 hashes.extend(res.get("hashes"))
                 if not res.get("offset"):
                     break
+                if len(hashes) >= maxresults:
+                    break
                 params.update({"offset": res.get("offset")})
-
-        return hashes 
+        
+        if maxresults:
+            return hashes[:maxresults]
+        else:
+            return hashes
 
     def dl(self, hashval):
-        url = "https://www.virustotal.com/vtapi/v2/file/download"
+        url = "https://www.virustotal.com/intelligence/download/"
         params = {"apikey":self.vtkey, "hash": hashval}
         resp = self.session.get(url, params=params)
         if resp.status_code == 200:
