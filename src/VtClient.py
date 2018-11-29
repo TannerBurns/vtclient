@@ -90,7 +90,7 @@ class VtClient:
         url = "'https://www.virustotal.com/intelligence/search/programmatic/'"
         params = {"apikey": self.vtkey, "search": query}
         while True:
-            resp = self.session.post(url, data=params)
+            resp = self.session.get(url, data=params)
             if resp.status_code == 200:
                 res = resp.json()
                 hashes.extend(res.get("hashes"))
