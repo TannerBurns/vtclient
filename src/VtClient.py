@@ -82,6 +82,27 @@ class VtClient:
             return hashes[:maxresults]
         else:
             return hashes
+    
+    def search2(self, query, maxresults=None):
+        hashes = []
+
+        url = "'https://www.virustotal.com/intelligence/search/programmatic/'"
+        params = {"apikey": self.vtkey, "search": query}
+        while True:
+            resp = self.session.post(url, data=params)
+            if resp.status_code == 200:
+                res = resp.json()
+                hashes.extend(res.get("hashes"))
+                if not res.get("next_page"):
+                    break
+                if len(hashes) >= maxresults:
+                    break
+                params.update({"page": res.get("next_page")})
+        
+        if maxresults:
+            return hashes[:maxresults]
+        else:
+            return hashes
 
     def dl(self, hashval):
         url = "https://www.virustotal.com/intelligence/download/"
