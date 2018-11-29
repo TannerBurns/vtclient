@@ -87,7 +87,7 @@ class VtClient:
     def search2(self, query, maxresults=None):
         hashes = []
 
-        url = "'https://www.virustotal.com/intelligence/search/programmatic/'"
+        url = "https://www.virustotal.com/intelligence/search/programmatic/"
         params = {"apikey": self.vtkey, "search": query}
         while True:
             resp = self.session.get(url, data=params)
@@ -96,8 +96,9 @@ class VtClient:
                 hashes.extend(res.get("hashes"))
                 if not res.get("next_page"):
                     break
-                if len(hashes) >= maxresults:
-                    break
+                if maxresults:
+                    if len(hashes) >= maxresults:
+                        break
                 params.update({"page": res.get("next_page")})
         
         if maxresults:
