@@ -74,8 +74,9 @@ class VtClient:
                 hashes.extend(res.get("hashes"))
                 if not res.get("offset"):
                     break
-                if len(hashes) >= maxresults:
-                    break
+                if maxresults:
+                    if len(hashes) >= maxresults:
+                        break
                 params.update({"offset": res.get("offset")})
         
         if maxresults:
