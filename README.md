@@ -7,6 +7,8 @@
 # Usage
 
     Search - search VT and get all hashes from the search
+    
+    Search2 - search VT using intelligence link, will be slower but will not use as much api key
 
     Download - Download a list of hashes
 
