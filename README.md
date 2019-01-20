@@ -25,7 +25,7 @@
 
     for reports in vtclient.reports(hashlist):
         #do stuff with reports
-        for hashval, report in report:
+        for hashval, report in reports:
             print(hashval)
             print(json.dumps(report, indent=4))
     
