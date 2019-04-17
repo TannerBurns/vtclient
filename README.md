@@ -17,7 +17,7 @@
 
 # Examples
 
-    from VtClient import VtClient
+    from src.VtClient import VtClient
 
     vtclient = VtClient("VTPRIAVATEKEY")
 
