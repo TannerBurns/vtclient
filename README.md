@@ -1,8 +1,12 @@
 # VtClient - Python3
 
-# Requirements
+# Requirements & Install
 
     Python3 - requests
+
+    To install library for system use, run the following:
+
+        pip install .
 
 # Usage
 
@@ -17,15 +21,15 @@
 
 # Examples
 
-    from src.VtClient import VtClient
+    from VtClient import VtClient
 
     vtclient = VtClient("VTPRIAVATEKEY")
 
     hashlist = vtclient.search("tag:peexe or pedll tag:trusted positives:0")
 
-    for reports in vtclient.reports(hashlist):
+    for page_reports in vtclient.reports(hashlist):
         #do stuff with reports
-        for hashval, report in reports.items():
+        for hashval, report in page_reports.items():
             print(hashval)
             print(json.dumps(report, indent=4))
     
