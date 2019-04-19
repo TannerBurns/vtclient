@@ -6,16 +6,21 @@ import functools
 import os
 
 class VtClient:
-    def __init__(self, vtkey, dlDirectory="downloads"):
+    def __init__(self, vtkey, workers=16, download_directory="downloads"):
+        self.WORKERS = workers
         self.session = requests.Session()
-        rqAdapters = requests.adapters.HTTPAdapter(pool_connections=16, pool_maxsize=20, max_retries=2)
+        rqAdapters = requests.adapters.HTTPAdapter(
+            pool_connections=self.WORKERS, 
+            pool_maxsize=self.WORKERS + 4, 
+            max_retries=2
+        )
         self.session.mount("https://", rqAdapters)
         self.session.headers.update({
                 "Accept-Encoding": "gzip, deflate",
-                "User-Agent" : "gzip,  My Python requests library example client or username"
+                "User-Agent" : "gzip,  Python Async VirusTotal Client"
         })
         self.vtkey = vtkey
-        self.dlDir = dlDirectory
+        self.dlDir = download_directory
     
 
     def report(self, hashval):
@@ -25,7 +30,7 @@ class VtClient:
     
     async def _yield_reports(self, hashlist):
         responses = {}
-        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.WORKERS) as executor:
             loop = asyncio.get_event_loop()
             futures = [
                 loop.run_in_executor(
@@ -46,7 +51,7 @@ class VtClient:
         return responses
     
     def reports(self, hashlist):
-        CHUNK = 16
+        CHUNK = self.WORKERS
         RESOURCE_CHUNK = 24
         loop = asyncio.get_event_loop()
         resource_groups = [",".join(hashlist[ind:ind+RESOURCE_CHUNK]) for ind in range(0, len(hashlist), RESOURCE_CHUNK)]
@@ -115,7 +120,7 @@ class VtClient:
                 fout.write(resp.content)
     
     async def _yield_downloads(self, hashlist):
-        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.WORKERS) as executor:
             loop = asyncio.get_event_loop()
             futures = [
                 loop.run_in_executor(
@@ -127,7 +132,7 @@ class VtClient:
         await asyncio.gather(*futures)
 
     def download(self, hashlist):
-        CHUNK = 16
+        CHUNK = self.WORKERS
         loop = asyncio.get_event_loop()
         if not os.path.exists(self.dlDir):
             os.makedirs(self.dlDir)
