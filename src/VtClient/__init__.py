@@ -51,12 +51,11 @@ class VtClient:
         return responses
     
     def reports(self, hashlist):
-        CHUNK = self.WORKERS
         RESOURCE_CHUNK = 24
         loop = asyncio.get_event_loop()
         resource_groups = [",".join(hashlist[ind:ind+RESOURCE_CHUNK]) for ind in range(0, len(hashlist), RESOURCE_CHUNK)]
-        for ind in range(0, len(resource_groups), CHUNK):
-            group = resource_groups[ind:ind+CHUNK]
+        for ind in range(0, len(resource_groups), self.WORKERS):
+            group = resource_groups[ind:ind+self.WORKERS]
             resp = {}
             for k,v in loop.run_until_complete(self._yield_reports(group)).items():
                 if len(k.split(",")) > 1:
@@ -132,13 +131,12 @@ class VtClient:
         await asyncio.gather(*futures)
 
     def download(self, hashlist):
-        CHUNK = self.WORKERS
         loop = asyncio.get_event_loop()
         if not os.path.exists(self.dlDir):
             os.makedirs(self.dlDir)
-        for ind in range(0, len(hashlist), CHUNK):
-            group = hashlist[ind:ind+CHUNK]
-            loop.run_until_complete(self._yield_downloads(group))
+        for ind in range(0, len(hashlist), self.WORKERS):
+            group = hashlist[ind:ind+self.WORKERS]
+            yield loop.run_until_complete(self._yield_downloads(group))
 
 
 
