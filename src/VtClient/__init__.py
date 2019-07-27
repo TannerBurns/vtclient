@@ -4,6 +4,7 @@ import concurrent.futures
 import json
 import functools
 import os
+import hashlib
 
 class VtClient:
     def __init__(self, vtkey, workers=16, download_directory="downloads"):
@@ -75,7 +76,7 @@ class VtClient:
             resp = self.session.post(url, data=params)
             if resp.status_code == 200:
                 res = resp.json()
-                hashes.extend(res.get("hashes"))
+                hashes.extend(res.get("hashes", []))
                 if not res.get("offset"):
                     break
                 if maxresults:
@@ -97,7 +98,7 @@ class VtClient:
             resp = self.session.get(url, params=params)
             if resp.status_code == 200:
                 res = resp.json()
-                hashes.extend(res.get("hashes"))
+                hashes.extend(res.get("hashes", []))
                 if not res.get("next_page"):
                     break
                 if maxresults:
@@ -109,14 +110,23 @@ class VtClient:
             return hashes[:maxresults]
         else:
             return hashes
+    
+    def integrity(self, content):
+        hasher = hashlib.sha256()
+        hasher.update(content)
+        return hasher.hexdigest()
 
     def dl(self, hashval):
         url = "https://www.virustotal.com/intelligence/download/"
         params = {"apikey":self.vtkey, "hash": hashval}
         resp = self.session.get(url, params=params)
         if resp.status_code == 200:
-            with open("downloads/{0}".format(hashval), "wb") as fout:
-                fout.write(resp.content)
+            check = self.integrity(resp.content)
+            if check == hashval:
+                with open("downloads/{0}".format(hashval), "wb") as fout:
+                    fout.write(resp.content)
+            else:
+                print("ERROR - Download failed integrity check. Given hash: {0}, received: {1}".format(hashval, check))
     
     async def _yield_downloads(self, hashlist):
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.WORKERS) as executor:
