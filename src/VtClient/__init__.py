@@ -24,19 +24,18 @@ class VtClient:
         self.dlDir = download_directory
     
 
-    def report(self, hashval):
+    def report(self, hashval, allinfo = 1):
         url = 'https://www.virustotal.com/vtapi/v2/file/report'
-        params = {"apikey": self.vtkey, "resource": hashval, "allinfo":1}
+        params = {"apikey": self.vtkey, "resource": hashval, "allinfo":allinfo}
         return self.session.get(url, params=params)
     
-    async def _yield_reports(self, hashlist):
+    async def _yield_reports(self, hashlist, allinfo=1):
         responses = {}
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.WORKERS) as executor:
-            loop = asyncio.get_event_loop()
             futures = [
-                loop.run_in_executor(
+                self.loop.run_in_executor(
                     executor,
-                    functools.partial(self.report, hashlist[ind])
+                    functools.partial(self.report, hashlist[ind], allinfo)
                 )
             for ind in range(0, len(hashlist)) if hashlist[ind]]
         
@@ -51,14 +50,14 @@ class VtClient:
         
         return responses
     
-    def reports(self, hashlist):
+    def reports(self, hashlist, allinfo=1):
         RESOURCE_CHUNK = 24
-        loop = asyncio.get_event_loop()
+        self.loop = asyncio.new_event_loop()
         resource_groups = [",".join(hashlist[ind:ind+RESOURCE_CHUNK]) for ind in range(0, len(hashlist), RESOURCE_CHUNK)]
         for ind in range(0, len(resource_groups), self.WORKERS):
             group = resource_groups[ind:ind+self.WORKERS]
             resp = {}
-            for k,v in loop.run_until_complete(self._yield_reports(group)).items():
+            for k,v in self.loop.run_until_complete(self._yield_reports(group, allinfo)).items():
                 if len(k.split(",")) > 1:
                     for r in v:
                         resp.update({r.get("sha256"):r})
@@ -122,17 +121,16 @@ class VtClient:
         resp = self.session.get(url, params=params)
         if resp.status_code == 200:
             check = self.integrity(resp.content)
-            if check == hashval:
-                with open("downloads/{0}".format(hashval), "wb") as fout:
+            if check.upper() == hashval.upper():
+                with open("{0}/{1}".format(self.dlDir, hashval), "wb") as fout:
                     fout.write(resp.content)
             else:
                 print("ERROR - Download failed integrity check. Given hash: {0}, received: {1}".format(hashval, check))
     
     async def _yield_downloads(self, hashlist):
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.WORKERS) as executor:
-            loop = asyncio.get_event_loop()
             futures = [
-                loop.run_in_executor(
+                self.loop.run_in_executor(
                     executor,
                     functools.partial(self.dl, hashlist[ind])
                 )
@@ -141,12 +139,12 @@ class VtClient:
         await asyncio.gather(*futures)
 
     def download(self, hashlist):
-        loop = asyncio.get_event_loop()
+        self.loop = asyncio.new_event_loop()
         if not os.path.exists(self.dlDir):
             os.makedirs(self.dlDir)
         for ind in range(0, len(hashlist), self.WORKERS):
             group = hashlist[ind:ind+self.WORKERS]
-            yield loop.run_until_complete(self._yield_downloads(group))
+            yield self.loop.run_until_complete(self._yield_downloads(group))
 
 
 
