@@ -1,6 +1,7 @@
 README.md
 setup.py
 src/VtClient/__init__.py
+src/VtClient/vtclient.py
 src/VtClient.egg-info/PKG-INFO
 src/VtClient.egg-info/SOURCES.txt
 src/VtClient.egg-info/dependency_links.txt

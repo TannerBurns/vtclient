@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
      name='VtClient',  
-     version='1.0',
+     version='1.1',
      author="Tanner Burns",
      author_email="tjburns102@gmail.com",
      description="An asynchronous client for VirusTotal",
