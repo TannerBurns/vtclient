@@ -1,0 +1,9 @@
+README.md
+setup.py
+VtClient.egg-info/PKG-INFO
+VtClient.egg-info/SOURCES.txt
+VtClient.egg-info/dependency_links.txt
+VtClient.egg-info/requires.txt
+VtClient.egg-info/top_level.txt
+vtclient/__init__.py
+vtclient/vtclient.py

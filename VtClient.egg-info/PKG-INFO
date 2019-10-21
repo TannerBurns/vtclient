@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: VtClient
-Version: 1.1
+Version: 1.1.2
 Summary: An asynchronous client for VirusTotal
 Home-page: https://github.com/tannerburns/vtclient
 Author: Tanner Burns
