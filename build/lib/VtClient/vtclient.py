@@ -1,79 +1,88 @@
 import requests
 import asyncio
-import concurrent.futures
 import json
-import functools
 import os
 import hashlib
 
-class VtClient:
-    def __init__(self, vtkey, workers=16, download_directory="downloads"):
-        self.WORKERS = workers
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
+from typing import Callable, Tuple
+
+
+class BaseAsyncClient(object):
+    def __init__(self, workers: int= 16, *args: list, **kwargs: dict):
+        self.num_workers = workers
         self.session = requests.Session()
         rqAdapters = requests.adapters.HTTPAdapter(
-            pool_connections=self.WORKERS, 
-            pool_maxsize=self.WORKERS + 4, 
-            max_retries=2
+            pool_connections = workers, 
+            pool_maxsize = workers + 4, 
+            max_retries=3
         )
         self.session.mount("https://", rqAdapters)
         self.session.mount('http://', rqAdapters)
         self.session.headers.update({
                 "Accept-Encoding": "gzip, deflate",
-                "User-Agent" : "gzip,  Python Async VirusTotal Client"
+                "User-Agent" : "gzip,  Python Asyncio Requests Client"
         })
-        self.vtkey = vtkey
-        self.dlDir = download_directory
+        self.basepath = os.path.realpath(os.getcwd())
     
+    def get(self, url:str, headers:dict=None, params:dict=None, data:dict=None, json:dict=None):
+        return self.session.get(url, headers=headers, params=params, data=data, json=json)
+    
+    def post(self, url:str, headers:dict=None, params:dict=None, data:dict=None, json:dict=None, files:dict=None):
+        return self.session.post(url, headers=headers, params=params, data=data, json=json, files=files)
+    
+    async def _bulk_request(self, req_fn:Callable, *args:list):
+        with ThreadPoolExecutor(max_workers=self.num_workers) as executor:
+            futures = [self.loop.run_in_executor(executor, partial(req_fn, *a)) for a in args if a]
+            await asyncio.gather(*futures)
+            return [f.result() for f in futures]
+    
+    def multirequest(self, req_fn:Callable, *args:list):
+        '''multirequest -- run requests function in bulk
+        
+           req_fn   -- {Callable} function to run in bulk
+           args -- {list} arguments to be distributed to function
 
-    def report(self, hashval, allinfo = 1):
+           return -- list of results from function
+        '''
+        self.loop = asyncio.new_event_loop()
+        return self.loop.run_until_complete(self._bulk_request(req_fn , *args))
+
+
+class VtClient(BaseAsyncClient):
+    def __init__(self, vtkey:str, download_directory:str="downloads", *args:list, **kwargs:dict):
+        super().__init__(*args, **kwargs)
+        self.vtkey = vtkey
+        self.download_directory = os.path.join(self.basepath, download_directory)
+
+    def report(self, hashval: str, allinfo: int= 1):
         url = 'https://www.virustotal.com/vtapi/v2/file/report'
         params = {"apikey": self.vtkey, "resource": hashval, "allinfo":allinfo}
-        return self.session.get(url, params=params)
+        return self.get(url, params=params)
     
-    async def _yield_reports(self, hashlist, allinfo=1):
-        responses = {}
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.WORKERS) as executor:
-            futures = [
-                self.loop.run_in_executor(
-                    executor,
-                    functools.partial(self.report, hashlist[ind], allinfo)
-                )
-            for ind in range(0, len(hashlist)) if hashlist[ind]]
-        
-        await asyncio.gather(*futures)
-
-        for ind in range(0, len(futures)):
-            resp = futures[ind].result()
-            if resp.status_code == 200:
-                responses.update({hashlist[ind]: resp.json()})
-            else:
-                responses.update({hashlist[ind]: "ERROR"})
-        
-        return responses
-    
-    def reports(self, hashlist, allinfo=1):
+    def reports(self, hashlist: list, allinfo: int= 1):
         RESOURCE_CHUNK = 24
         self.loop = asyncio.new_event_loop()
         resource_groups = [",".join(hashlist[ind:ind+RESOURCE_CHUNK]) for ind in range(0, len(hashlist), RESOURCE_CHUNK)]
-        for ind in range(0, len(resource_groups), self.WORKERS):
-            group = resource_groups[ind:ind+self.WORKERS]
-            resp = {}
-            for k,v in self.loop.run_until_complete(self._yield_reports(group, allinfo)).items():
-                if len(k.split(",")) > 1:
-                    for r in v:
-                        resp.update({r.get("sha256"):r})
-                else:
-                    resp.update({k:v})
-            yield resp
-
+        responses = self.multirequest(self.report, (resource_groups, allinfo))
+        return  {res.get('sha256'):res for r in responses if r.status_code == 200 for res in r.json()}
     
+    def genreports(self, hashlist: list, allinfo: int= 1):
+        RESOURCE_CHUNK = 24
+        self.loop = asyncio.new_event_loop()
+        resource_groups = [",".join(hashlist[ind:ind+RESOURCE_CHUNK]) for ind in range(0, len(hashlist), RESOURCE_CHUNK)]
+        for ind in range(0, len(resource_groups), self.num_workers):
+            group = resource_groups[ind:ind+self.num_workers]
+            responses = self.multirequest(self.report, (group, allinfo))                      
+            yield {res.get('sha256'):res for r in responses if r.status_code == 200 for res in r.json()}
+  
     def search(self, query, maxresults=None):
         hashes = []
-
         url = "https://www.virustotal.com/vtapi/v2/file/search"
         params = {"apikey": self.vtkey, "query": query}
         while True:
-            resp = self.session.post(url, data=params)
+            resp = self.post(url, data=params)
             if resp.status_code == 200:
                 res = resp.json()
                 hashes.extend(res.get("hashes", []))
@@ -83,7 +92,6 @@ class VtClient:
                     if len(hashes) >= maxresults:
                         break
                 params.update({"offset": res.get("offset")})
-        
         if maxresults:
             return hashes[:maxresults]
         else:
@@ -91,11 +99,10 @@ class VtClient:
     
     def search2(self, query, maxresults=None):
         hashes = []
-
         url = "https://www.virustotal.com/intelligence/search/programmatic/"
         params = {"apikey": self.vtkey, "query": query}
         while True:
-            resp = self.session.get(url, params=params)
+            resp = self.get(url, params=params)
             if resp.status_code == 200:
                 res = resp.json()
                 hashes.extend(res.get("hashes", []))
@@ -105,45 +112,37 @@ class VtClient:
                     if len(hashes) >= maxresults:
                         break
                 params.update({"page": res.get("next_page")})
-        
         if maxresults:
             return hashes[:maxresults]
         else:
             return hashes
     
-    def integrity(self, content):
+    def _integrity(self, content):
         hasher = hashlib.sha256(content)
         return hasher.hexdigest()
 
-    def dl(self, hashval):
+    def _download(self, hashval):
         url = "https://www.virustotal.com/intelligence/download/"
         params = {"apikey":self.vtkey, "hash": hashval}
-        resp = self.session.get(url, params=params)
+        resp = self.get(url, params=params)
         if resp.status_code == 200:
-            check = self.integrity(resp.content)
+            check = self._integrity(resp.content)
             if check.upper() == hashval.upper():
-                with open("{0}/{1}".format(self.dlDir, hashval), "wb") as fout:
+                with open(f'{self.download_directory}/{hashval}', 'wb') as fout:
                     fout.write(resp.content)
                 return {hashval: 'SUCCESS'}
             else:
                 return {hashval: 'ERROR - integrity check'}
         else:
-            return {hashval: f'ERROR - status code {resp.status_code}'}
-    
-    async def _yield_downloads(self, hashlist):
-        with concurrent.futures.ThreadPoolExecutor(max_workers=self.WORKERS) as executor:
-            futures = [
-                self.loop.run_in_executor(
-                    executor,
-                    functools.partial(self.dl, hashlist[ind])
-                )
-            for ind in range(0, len(hashlist)) if hashlist[ind]]
-        await asyncio.gather(*futures)
-        return [f.result() for f in futures]
+            return {hashval: f'ERROR - status code {resp.status_code}'}        
 
     def download(self, hashlist):
-        self.loop = asyncio.new_event_loop()
-        if not os.path.exists(self.dlDir):
-            os.makedirs(self.dlDir)
-        for ind in range(0, len(hashlist), self.WORKERS):
-            yield self.loop.run_until_complete(self._yield_downloads(hashlist[ind:ind+self.WORKERS]))
+        if not os.path.exists(self.download_directory):
+            os.makedirs(self.download_directory)
+        return self.multirequest(self._download, hashlist)
+
+    def gendownload(self, hashlist):
+        if not os.path.exists(self.download_directory):
+            os.makedirs(self.download_directory)
+        for ind in range(0, len(hashlist), self.num_workers):
+            yield self.multirequest(self._download, hashlist[ind:ind+self.num_workers])
