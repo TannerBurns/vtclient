@@ -26,18 +26,23 @@ class BaseAsyncClient(object):
         })
         self.basepath = os.path.realpath(os.getcwd())
     
-    def get(self, url:str, headers:dict=None, params:dict=None, data:dict=None, json:dict=None):
-        return self.session.get(url, headers=headers, params=params, data=data, json=json)
+    async def execute_request(self, req_fn, url:str, headers:dict=None, params:dict=None, data:dict=None, json:dict=None):
+        return req_fn(url, headers=headers, params=params, data=data, json=json)
+
+    async def get(self, url:str, headers:dict=None, params:dict=None, data:dict=None, json:dict=None):
+        kwargs = {'url': url, 'headers': headers, 'params': params, 'data': data, 'json': json}
+        return await self.execute_request(self.session.get, **kwargs)
     
-    def post(self, url:str, headers:dict=None, params:dict=None, data:dict=None, json:dict=None, files:dict=None):
-        return self.session.post(url, headers=headers, params=params, data=data, json=json, files=files)
-    
+    async def post(self, url:str, headers:dict=None, params:dict=None, data:dict=None, json:dict=None, files:dict=None):
+        kwargs = {'url': url, 'headers': headers, 'params': params, 'data': data, 'json': json, 'files': files}
+        return await self.execute_request(self.session.post, **kwargs)
+
     async def _bulk_request(self, req_fn:Callable, *args:list):
-        with ThreadPoolExecutor(max_workers=self.num_workers) as executor:
-            futures = [self.loop.run_in_executor(executor, partial(req_fn, *a)) for a in args if a]
-            await asyncio.gather(*futures)
-            return [f.result() for f in futures]
-    
+        return [
+            await req_fn(*args[i:i+self.num_workers]) 
+            for i in range(0, len(args), self.num_workers)
+        ]
+
     def multirequest(self, req_fn:Callable, *args:list):
         '''multirequest -- run requests function in bulk
         
