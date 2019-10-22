@@ -26,8 +26,8 @@ class BaseAsyncClient(object):
         })
         self.basepath = os.path.realpath(os.getcwd())
     
-    async def execute_request(self, req_fn, url:str, headers:dict=None, params:dict=None, data:dict=None, json:dict=None):
-        return req_fn(url, headers=headers, params=params, data=data, json=json)
+    async def execute_request(self, req_fn, **kwargs):
+        return req_fn(**kwargs)
 
     async def get(self, url:str, headers:dict=None, params:dict=None, data:dict=None, json:dict=None):
         kwargs = {'url': url, 'headers': headers, 'params': params, 'data': data, 'json': json}
@@ -37,13 +37,14 @@ class BaseAsyncClient(object):
         kwargs = {'url': url, 'headers': headers, 'params': params, 'data': data, 'json': json, 'files': files}
         return await self.execute_request(self.session.post, **kwargs)
 
-    async def _bulk_request(self, req_fn:Callable, *args:list):
+    async def _bulk_request(self, req_fn:Callable, args:list):
         return [
-            await req_fn(*args[i:i+self.num_workers]) 
+            await req_fn(*a) 
             for i in range(0, len(args), self.num_workers)
+            for a in args[i:i+self.num_workers]
         ]
 
-    def multirequest(self, req_fn:Callable, *args:list):
+    def multirequest(self, req_fn:Callable, args:list):
         '''multirequest -- run requests function in bulk
         
            req_fn   -- {Callable} function to run in bulk
@@ -52,7 +53,7 @@ class BaseAsyncClient(object):
            return -- list of results from function
         '''
         self.loop = asyncio.new_event_loop()
-        return self.loop.run_until_complete(self._bulk_request(req_fn , *args))
+        return self.loop.run_until_complete(self._bulk_request(req_fn, args))
 
 
 class VtClient(BaseAsyncClient):
@@ -68,24 +69,24 @@ class VtClient(BaseAsyncClient):
     
     def reports(self, hashlist: list, allinfo: int= 1):
         rsrc_chunk = 24
-        resource_groups = [",".join(hashlist[ind:ind+rsrc_chunk]) for ind in range(0, len(hashlist), rsrc_chunk)]
-        responses = self.multirequest(self.report, (resource_groups, allinfo))
+        resource_groups = [[",".join(hashlist[ind:ind+rsrc_chunk]), allinfo] for ind in range(0, len(hashlist), rsrc_chunk)]
+        responses = self.multirequest(self.report, resource_groups)
         return  {res.get('sha256'):res for r in responses if r.status_code == 200 for res in r.json()}
     
     def genreports(self, hashlist: list, allinfo: int= 1):
         rsrc_chunk = 24
-        resource_groups = [",".join(hashlist[ind:ind+rsrc_chunk]) for ind in range(0, len(hashlist), rsrc_chunk)]
+        resource_groups = [[",".join(hashlist[ind:ind+rsrc_chunk]), allinfo] for ind in range(0, len(hashlist), rsrc_chunk)]
         for ind in range(0, len(resource_groups), self.num_workers):
             group = resource_groups[ind:ind+self.num_workers]
-            responses = self.multirequest(self.report, (group, allinfo))                      
+            responses = self.multirequest(self.report, group)                      
             yield {res.get('sha256'):res for r in responses if r.status_code == 200 for res in r.json()}
   
     def search(self, query, maxresults=None):
         hashes = []
         url = "https://www.virustotal.com/vtapi/v2/file/search"
-        params = {"apikey": self.vtkey, "query": query}
+        data = {"apikey": self.vtkey, "query": query}
         while True:
-            resp = self.post(url, data=params)
+            resp = self.session.post(url, data=data)
             if resp.status_code == 200:
                 res = resp.json()
                 hashes.extend(res.get("hashes", []))
@@ -94,7 +95,7 @@ class VtClient(BaseAsyncClient):
                 if maxresults:
                     if len(hashes) >= maxresults:
                         break
-                params.update({"offset": res.get("offset")})
+                data.update({"offset": res.get("offset")})
         if maxresults:
             return hashes[:maxresults]
         else:
@@ -105,7 +106,7 @@ class VtClient(BaseAsyncClient):
         url = "https://www.virustotal.com/intelligence/search/programmatic/"
         params = {"apikey": self.vtkey, "query": query}
         while True:
-            resp = self.get(url, params=params)
+            resp = self.session.get(url, params=params)
             if resp.status_code == 200:
                 res = resp.json()
                 hashes.extend(res.get("hashes", []))
@@ -124,10 +125,11 @@ class VtClient(BaseAsyncClient):
         hasher = hashlib.sha256(content)
         return hasher.hexdigest()
 
-    def _download(self, hashval):
+    async def _download(self, *hashval):
+        hashval = ''.join(hashval)
         url = "https://www.virustotal.com/intelligence/download/"
         params = {"apikey":self.vtkey, "hash": hashval}
-        resp = self.get(url, params=params)
+        resp = self.session.get(url, params=params)
         if resp.status_code == 200:
             check = self._integrity(resp.content)
             if check.upper() == hashval.upper():
