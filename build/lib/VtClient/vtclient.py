@@ -62,16 +62,14 @@ class VtClient(BaseAsyncClient):
         return self.get(url, params=params)
     
     def reports(self, hashlist: list, allinfo: int= 1):
-        RESOURCE_CHUNK = 24
-        self.loop = asyncio.new_event_loop()
-        resource_groups = [",".join(hashlist[ind:ind+RESOURCE_CHUNK]) for ind in range(0, len(hashlist), RESOURCE_CHUNK)]
+        rsrc_chunk = 24
+        resource_groups = [",".join(hashlist[ind:ind+rsrc_chunk]) for ind in range(0, len(hashlist), rsrc_chunk)]
         responses = self.multirequest(self.report, (resource_groups, allinfo))
         return  {res.get('sha256'):res for r in responses if r.status_code == 200 for res in r.json()}
     
     def genreports(self, hashlist: list, allinfo: int= 1):
-        RESOURCE_CHUNK = 24
-        self.loop = asyncio.new_event_loop()
-        resource_groups = [",".join(hashlist[ind:ind+RESOURCE_CHUNK]) for ind in range(0, len(hashlist), RESOURCE_CHUNK)]
+        rsrc_chunk = 24
+        resource_groups = [",".join(hashlist[ind:ind+rsrc_chunk]) for ind in range(0, len(hashlist), rsrc_chunk)]
         for ind in range(0, len(resource_groups), self.num_workers):
             group = resource_groups[ind:ind+self.num_workers]
             responses = self.multirequest(self.report, (group, allinfo))                      
