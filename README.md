@@ -3,12 +3,15 @@
 ![Python3.7 badge](https://img.shields.io/badge/python-v3.7-blue)
 
 
-# Requirements & Install
+# Requirements
 
-    Python3
-    (inside of a virutalenv) pip3 install .
-        - will install requests package as requirement
+    - Python3.7+
+    - pip3
 
+# Installation
+
+    pip3 install .
+    - Recommend installing within a virtual environment
 
 # Usage
 
@@ -27,12 +30,12 @@
 
     from vtclient import VTClient
 
-    vtclient = VTClient("VTPRIAVATEKEY")
+    vtclient = VTClient("VTPRIVATEKEY")
 
     hashlist = vtclient.search("tag:peexe or pedll tag:trusted positives:0")
 
     for page_reports in vtclient.reports(hashlist):
-        #do stuff with reports
+        # Process report data
         for hashval, report in page_reports.items():
             print(hashval)
             print(json.dumps(report, indent=4))
