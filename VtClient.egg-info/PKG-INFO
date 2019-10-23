@@ -1,12 +1,12 @@
 Metadata-Version: 2.1
-Name: VtClient
+Name: VTClient
 Version: 1.3.7
 Summary: An asynchronous client for VirusTotal
 Home-page: https://github.com/tannerburns/vtclient
 Author: Tanner Burns
 Author-email: tjburns102@gmail.com
 License: UNKNOWN
-Description: # VtClient - VirusTotal API Client
+Description: # VTClient - VirusTotal API Client
         
         ![Python3.7 badge](https://img.shields.io/badge/python-v3.7-blue)
         
@@ -33,9 +33,9 @@ Description: # VtClient - VirusTotal API Client
         
         # Examples
         
-            from vtclient import VtClient
+            from vtclient import VTClient
         
-            vtclient = VtClient("VTPRIAVATEKEY")
+            vtclient = VTClient("VTPRIAVATEKEY")
         
             hashlist = vtclient.search("tag:peexe or pedll tag:trusted positives:0")
         

@@ -56,7 +56,7 @@ class BaseAsyncClient(object):
         return self.loop.run_until_complete(self._bulk_request(req_fn, args))
 
 
-class VtClient(BaseAsyncClient):
+class VTClient(BaseAsyncClient):
     def __init__(self, vtkey:str, download_directory:str="downloads", *args:list, **kwargs:dict):
         super().__init__(*args, **kwargs)
         self.vtkey = vtkey

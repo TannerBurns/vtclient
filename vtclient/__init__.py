@@ -1,1 +1,1 @@
-from .vtclient import VtClient
+from .vtclient import VTClient

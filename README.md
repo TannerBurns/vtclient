@@ -1,4 +1,4 @@
-# VtClient - VirusTotal API Client
+# VTClient - VirusTotal API Client
 
 ![Python3.7 badge](https://img.shields.io/badge/python-v3.7-blue)
 
@@ -25,9 +25,9 @@
 
 # Examples
 
-    from vtclient import VtClient
+    from vtclient import VTClient
 
-    vtclient = VtClient("VTPRIAVATEKEY")
+    vtclient = VTClient("VTPRIAVATEKEY")
 
     hashlist = vtclient.search("tag:peexe or pedll tag:trusted positives:0")
 
