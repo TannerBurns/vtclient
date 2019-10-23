@@ -1,12 +1,13 @@
-import requests
 import asyncio
+import hashlib
 import json
 import os
-import hashlib
 
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from typing import Callable, Tuple
+
+import requests
 
 
 class BaseAsyncClient(object):
