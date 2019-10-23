@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-     name='VtClient',  
+     name='VTClient',  
      version='1.3.7',
      author="Tanner Burns",
      author_email="tjburns102@gmail.com",
