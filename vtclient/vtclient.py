@@ -6,18 +6,18 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from typing import Callable, Tuple
+from urllib.parse import urlparse, parse_qs
 
 import requests
 
-
-class BaseAsyncClient(object):
+class AioRequests(object):
     def __init__(self, workers: int= 16, *args: list, **kwargs: dict):
         self.workers = workers
         self.session = requests.Session()
         rqAdapters = requests.adapters.HTTPAdapter(
             pool_connections = workers, 
-            pool_maxsize = workers + 4, 
-            max_retries=3
+            pool_maxsize = workers+4, 
+            max_retries = 3
         )
         self.session.mount("https://", rqAdapters)
         self.session.mount('http://', rqAdapters)
@@ -26,38 +26,81 @@ class BaseAsyncClient(object):
                 "User-Agent" : "gzip,  Python Asyncio Requests Client"
         })
         self.basepath = os.path.realpath(os.getcwd())
+
+    async def _execute(self, fn: Callable, *args: list, **kwargs: dict):
+        return fn(*args, **kwargs)
     
-    async def execute_request(self, request_function, **kwargs):
-        return request_function(**kwargs)
-
-    async def get(self, url:str, headers:dict=None, params:dict=None, data:dict=None, json:dict=None):
-        kwargs = {'url': url, 'headers': headers, 'params': params, 'data': data, 'json': json}
-        return await self.execute_request(self.session.get, **kwargs)
+    async def async_get(self, *args, **kwargs):
+        return await self._execute(self.session.get, *args, **kwargs)
     
-    async def post(self, url:str, headers:dict=None, params:dict=None, data:dict=None, json:dict=None, files:dict=None):
-        kwargs = {'url': url, 'headers': headers, 'params': params, 'data': data, 'json': json, 'files': files}
-        return await self.execute_request(self.session.post, **kwargs)
+    async def async_post(self, *args, **kwargs):
+        return await self._execute(self.session.post, *args, **kwargs)
+    
+    async def async_put(self, *args, **kwargs):
+        return await self._execute(self.session.put, *args, **kwargs)
+    
+    async def async_delete(self, *args, **kwargs):
+        return await self._execute(self.session.delete, *args, **kwargs)
 
-    async def _bulk_request(self, request_function:Callable, args:list):
-        return [
-            await request_function(*arg) 
-            for index in range(0, len(args), self.workers)
-            for arg in args[index : index + self.workers]
-        ]
+    async def async_head(self, *args, **kwargs):
+        return await self._execute(self.session.head, *args, **kwargs)
 
-    def multirequest(self, request_function:Callable, args:list):
-        '''multirequest -- run requests function in bulk
-        
-           request_function   -- {Callable} function to run in bulk
-           args -- {list} arguments to be distributed to function
+    def get(self, *args, **kwargs):
+        return self.session.get(*args, **kwargs)
+    
+    def post(self, *args, **kwargs):
+        return self.session.post(*args, **kwargs)
 
-           return -- list of results from function
-        '''
-        self.loop = asyncio.new_event_loop()
-        return self.loop.run_until_complete(self._bulk_request(request_function, args))
+    def put(self, *args, **kwargs):
+        return self.session.put(*args, **kwargs)
+ 
+    def delete(self, *args, **kwargs):
+        return self.session.delete(*args, **kwargs)
+    
+    def head(self, *args, **kwargs):
+        return self.session.head(*args, **kwargs)
+  
+    async def _aio_executor(self, method: str, args: list):
+        if method.lower() == 'get':
+            return [
+                await self.async_get(argtuple[0], **argtuple[1])
+                for i in range(0, len(args), self.workers) 
+                for argtuple in args[i:i+self.workers]
+            ]
+        elif method.lower() == 'post':
+            return [
+                await self.async_post(argtuple[0], **argtuple[1]) 
+                for i in range(0, len(args), self.workers) 
+                for argtuple in args[i:i+self.workers]
+            ]
+        elif method.lower() == 'put':
+            return [
+                await self.async_put(argtuple[0], **argtuple[1]) 
+                for i in range(0, len(args), self.workers) 
+                for argtuple in args[i:i+self.workers]
+            ]
+        elif method.lower() == 'delete':
+            return [
+                await self.async_delete(argtuple[0], **argtuple[1]) 
+                for i in range(0, len(args), self.workers) 
+                for argtuple in args[i:i+self.workers]
+            ]
+        elif method.lower() == 'head':
+            return [
+                await self.async_head(argtuple[0], **argtuple[1]) 
+                for i in range(0, len(args), self.workers) 
+                for argtuple in args[i:i+self.workers]
+            ]
+        else:
+            raise Exception(f'Method "{method}" not supported. Choices: get, post, put, delete, head')
+
+    def bulk_request(self, method: str, args: list):
+        loop = asyncio.new_event_loop()
+        return loop.run_until_complete(self._aio_executor(method, args))
 
 
-class VTClient(BaseAsyncClient):
+
+class VTClient(AioRequests):
     def __init__(self, vtkey:str, download_directory:str="downloads", *args:list, **kwargs:dict):
         super().__init__(*args, **kwargs)
         self.vtkey = vtkey
@@ -66,28 +109,30 @@ class VTClient(BaseAsyncClient):
     def report(self, hashval: str, allinfo: int= 1):
         url = 'https://www.virustotal.com/vtapi/v2/file/report'
         params = {"apikey" : self.vtkey, "resource" : hashval, "allinfo" : allinfo}
-        return self.get(url, params=params)
+        response = self.get(url, params=params)
+        return {hashval: response.json() if response.status_code == 200 else response.status_code}
     
     def reports(self, hashlist: list, allinfo: int= 1):
+        url = 'https://www.virustotal.com/vtapi/v2/file/report'
         resource_chunk = 24
-        resource_groups = [[",".join(hashlist[index : index + resource_chunk]), allinfo] for index in range(0, len(hashlist), resource_chunk)]
-        responses = self.multirequest(self.report, resource_groups)
-        return {res.get('sha256'):res for r in responses if r.status_code == 200 for res in r.json()}
+        resource_groups = [",".join(hashlist[index : index + resource_chunk]) for index in range(0, len(hashlist), resource_chunk)]
+        calls = [(url, {'params': {"apikey" : self.vtkey, "resource" : group, "allinfo" : allinfo}}) for group in resource_groups]
+        return {
+            resp.get('sha256'):resp
+            for responses in bulk_responses
+            for resp in responses.json()
+        }
     
     def generate_reports(self, hashlist: list, allinfo: int= 1):
-        resource_chunk = 24
-        resource_groups = [[",".join(hashlist[index : index + resource_chunk]), allinfo] for index in range(0, len(hashlist), resource_chunk)]
-        for index in range(0, len(resource_groups), self.workers):
-            group = resource_groups[index : index + self.workers]
-            responses = self.multirequest(self.report, group)                      
-            yield {res.get('sha256'):res for r in responses if r.status_code == 200 for res in r.json()}
-  
+        for index in range(0, len(hashlist), self.workers):
+            yield reports(hashlist[index:index+self.workers], allinfo)
+        
     def search(self, query, maxresults=None):
         hashes = []
         url = "https://www.virustotal.com/vtapi/v2/file/search"
         data = {"apikey" : self.vtkey, "query" : query}
         while True:
-            resp = self.session.post(url, data=data)
+            resp = self.post(url, data=data)
             if resp.status_code == 200:
                 res = resp.json()
                 hashes.extend(res.get("hashes", []))
@@ -107,7 +152,7 @@ class VTClient(BaseAsyncClient):
         url = "https://www.virustotal.com/intelligence/search/programmatic/"
         params = {"apikey" : self.vtkey, "query" : query}
         while True:
-            resp = self.session.get(url, params=params)
+            resp = self.get(url, params=params)
             if resp.status_code == 200:
                 res = resp.json()
                 hashes.extend(res.get("hashes", []))
@@ -123,32 +168,31 @@ class VTClient(BaseAsyncClient):
             return hashes
     
     def _integrity(self, content):
-        hasher = hashlib.sha256(content)
-        return hasher.hexdigest()
-
-    async def _download(self, *hashval):
-        hashval = ''.join(hashval)
-        url = "https://www.virustotal.com/intelligence/download/"
-        params = {"apikey" : self.vtkey, "hash" : hashval}
-        resp = self.session.get(url, params=params)
-        if resp.status_code == 200:
-            check = self._integrity(resp.content)
-            if check.upper() == hashval.upper():
-                with open(f'{self.download_directory}/{hashval}', 'wb') as fout:
-                    fout.write(resp.content)
-                return {hashval: 'SUCCESS'}
-            else:
-                return {hashval: 'ERROR - integrity check'}
-        else:
-            return {hashval: f'ERROR - status code {resp.status_code}'}        
+        return hashlib.sha256(content).hexdigest() 
 
     def download(self, hashlist):
         if not os.path.exists(self.download_directory):
             os.makedirs(self.download_directory)
-        return self.multirequest(self._download, hashlist)
+        url = "https://www.virustotal.com/intelligence/download/"
+        calls = [(url, {'params': {'apikey': self.vtkey, 'hash': hashval}}) for hashval in hashlist]
+        bulk_responses = self.bulk_request('get', calls)
+        results = []
+        for response in bulk_responses:
+            if response.status_code == 200:
+                hashval = urlparse(response.url).path[1:]
+                check = self._integrity(response.content)
+                if check.upper() == hashval.upper():
+                    with open(f'{self.download_directory}/{hashval}', 'wb') as fout:
+                        fout.write(response.content)
+                    results.append({hashval: 'SUCCESS'})
+                else:
+                    results.append({hashval: 'FAILED INTEGRITY CHECK'})
+            elif response.status_code == 404:
+                hashval = parse_qs(urlparse(response.url).query).get('hash', [])
+                if hashval and len(hashval) > 0:
+                    results.append({hashval[0]: 'NOT FOUND'})
+        return results
 
-    def gendownload(self, hashlist):
-        if not os.path.exists(self.download_directory):
-            os.makedirs(self.download_directory)
+    def generate_downloads(self, hashlist):
         for index in range(0, len(hashlist), self.workers):
-            yield self.multirequest(self._download, hashlist[index : index + self.workers])
+            yield download(hashlist[index:index+self.workers])
