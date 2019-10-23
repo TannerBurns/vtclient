@@ -5,10 +5,11 @@ import os
 
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from typing import Callable, Tuple
+from typing import Callable, Tuple, List
 from urllib.parse import urlparse, parse_qs
 
 import requests
+
 
 class AioRequests(object):
     def __init__(self, workers: int= 16, *args: list, **kwargs: dict):
@@ -60,44 +61,43 @@ class AioRequests(object):
     def head(self, *args, **kwargs):
         return self.session.head(*args, **kwargs)
   
-    async def _aio_executor(self, method: str, args: list):
+    async def _aio_executor(self, method: str, calls: List[Tuple[list, dict]]):
         if method.lower() == 'get':
             return [
-                await self.async_get(argtuple[0], **argtuple[1])
-                for i in range(0, len(args), self.workers) 
-                for argtuple in args[i:i+self.workers]
+                await self.async_get(*argtuple[0], **argtuple[1]) 
+                for index in range(0, len(calls), self.workers) 
+                for argtuple in calls[index:index+self.workers]
             ]
         elif method.lower() == 'post':
             return [
-                await self.async_post(argtuple[0], **argtuple[1]) 
-                for i in range(0, len(args), self.workers) 
-                for argtuple in args[i:i+self.workers]
+                await self.async_post(*argtuple[0], **argtuple[1]) 
+                for index in range(0, len(calls), self.workers)
+                for argtuple in calls[index:index+self.workers]
             ]
         elif method.lower() == 'put':
             return [
-                await self.async_put(argtuple[0], **argtuple[1]) 
-                for i in range(0, len(args), self.workers) 
-                for argtuple in args[i:i+self.workers]
+                await self.async_put(*argtuple[0], **argtuple[1]) 
+                for index in range(0, len(calls), self.workers) 
+                for argtuple in calls[index:index+self.workers]
             ]
         elif method.lower() == 'delete':
             return [
-                await self.async_delete(argtuple[0], **argtuple[1]) 
-                for i in range(0, len(args), self.workers) 
-                for argtuple in args[i:i+self.workers]
+                await self.async_delete(*argtuple[0], **argtuple[1]) 
+                for index in range(0, len(calls), self.workers) 
+                for argtuple in calls[index:index+self.workers]
             ]
         elif method.lower() == 'head':
             return [
-                await self.async_head(argtuple[0], **argtuple[1]) 
-                for i in range(0, len(args), self.workers) 
-                for argtuple in args[i:i+self.workers]
+                await self.async_head(*argtuple[0], **argtuple[1]) 
+                for index in range(0, len(calls), self.workers) 
+                for argtuple in calls[index:index+self.workers]
             ]
         else:
             raise Exception(f'Method "{method}" not supported. Choices: get, post, put, delete, head')
 
-    def bulk_request(self, method: str, args: list):
+    def bulk_request(self, method: str, calls: List[Tuple[list, dict]]):
         loop = asyncio.new_event_loop()
-        return loop.run_until_complete(self._aio_executor(method, args))
-
+        return loop.run_until_complete(self._aio_executor(method, calls))
 
 
 class VTClient(AioRequests):
@@ -115,11 +115,17 @@ class VTClient(AioRequests):
     def reports(self, hashlist: list, allinfo: int= 1):
         url = 'https://www.virustotal.com/vtapi/v2/file/report'
         resource_chunk = 24
-        resource_groups = [",".join(hashlist[index : index + resource_chunk]) for index in range(0, len(hashlist), resource_chunk)]
-        calls = [(url, {'params': {"apikey" : self.vtkey, "resource" : group, "allinfo" : allinfo}}) for group in resource_groups]
+        resource_groups = [
+            ",".join(hashlist[index : index + resource_chunk]) 
+            for index in range(0, len(hashlist), resource_chunk)
+        ]
+        calls = [
+            ([url], {'params': {"apikey" : self.vtkey, "resource" : group, "allinfo" : allinfo}}) 
+            for group in resource_groups
+        ]
         return {
-            resp.get('sha256'):resp
-            for responses in bulk_responses
+            resp.get('sha256', resp.get('resource')):resp
+            for responses in self.bulk_request('get', calls)
             for resp in responses.json()
         }
     
@@ -174,7 +180,7 @@ class VTClient(AioRequests):
         if not os.path.exists(self.download_directory):
             os.makedirs(self.download_directory)
         url = "https://www.virustotal.com/intelligence/download/"
-        calls = [(url, {'params': {'apikey': self.vtkey, 'hash': hashval}}) for hashval in hashlist]
+        calls = [([url], {'params': {'apikey': self.vtkey, 'hash': hashval}}) for hashval in hashlist]
         bulk_responses = self.bulk_request('get', calls)
         results = []
         for response in bulk_responses:
