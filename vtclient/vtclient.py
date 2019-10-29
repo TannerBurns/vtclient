@@ -8,9 +8,9 @@ from functools import partial
 from typing import Callable, Tuple, List
 from urllib.parse import urlparse, parse_qs
 
-from aiorequests import AioRequests
+from vast.requests import VastSession
 
-class VTClient(AioRequests):
+class VTClient(VastSession):
     def __init__(self, vtkey:str, download_directory:str="downloads", *args:list, **kwargs:dict):
         super().__init__(*args, **kwargs)
         self.vtkey = vtkey
@@ -19,7 +19,7 @@ class VTClient(AioRequests):
     def report(self, hashval: str, allinfo: int= 1):
         url = 'https://www.virustotal.com/vtapi/v2/file/report'
         params = {"apikey" : self.vtkey, "resource" : hashval, "allinfo" : allinfo}
-        response = self.get(url, params=params)
+        response = self.session.get(url, params=params)
         return {hashval: response.json() if response.status_code == 200 else response.status_code}
     
     def reports(self, hashlist: list, allinfo: int= 1):
@@ -48,7 +48,7 @@ class VTClient(AioRequests):
         url = "https://www.virustotal.com/vtapi/v2/file/search"
         data = {"apikey" : self.vtkey, "query" : query}
         while True:
-            resp = self.post(url, data=data)
+            resp = self.session.post(url, data=data)
             if resp.status_code == 200:
                 res = resp.json()
                 hashes.extend(res.get("hashes", []))
@@ -68,7 +68,7 @@ class VTClient(AioRequests):
         url = "https://www.virustotal.com/intelligence/search/programmatic/"
         params = {"apikey" : self.vtkey, "query" : query}
         while True:
-            resp = self.get(url, params=params)
+            resp = self.session.get(url, params=params)
             if resp.status_code == 200:
                 res = resp.json()
                 hashes.extend(res.get("hashes", []))
