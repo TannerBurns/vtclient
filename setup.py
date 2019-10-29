@@ -15,7 +15,7 @@ setuptools.setup(
      packages=setuptools.find_packages(),
      include_package_data=True,
      install_requires=[
-         "aiorequests @ https://github.com/TannerBurns/aiorequests/archive/master.zip"
+         "vast @ https://github.com/TannerBurns/vast/archive/master.zip"
      ],
      classifiers=[
          "Programming Language :: Python :: 3",
