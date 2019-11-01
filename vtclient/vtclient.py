@@ -90,23 +90,25 @@ class VTClient(VastSession):
         if not os.path.exists(self.download_directory):
             os.makedirs(self.download_directory)
         url = "https://www.virustotal.com/intelligence/download/"
-        calls = [('get', url, {'params': {'apikey': self.vtkey, 'hash': hashval}}) for hashval in hashlist]
-        bulk_responses = self.bulk_requests(calls)
+        calls = [('get', url, [{'params': {'apikey': self.vtkey, 'hash': hashval}}]) for hashval in hashlist]
         results = []
-        for response in bulk_responses:
-            if response.status_code == 200:
-                hashval = urlparse(response.url).path[1:]
-                check = self._integrity(response.content)
-                if check.upper() == hashval.upper():
-                    with open(f'{self.download_directory}/{hashval}', 'wb') as fout:
-                        fout.write(response.content)
-                    results.append({hashval: 'SUCCESS'})
-                else:
-                    results.append({hashval: 'FAILED INTEGRITY CHECK'})
-            elif response.status_code == 404:
-                hashval = parse_qs(urlparse(response.url).query).get('hash', [])
-                if hashval and len(hashval) > 0:
-                    results.append({hashval[0]: 'NOT FOUND'})
+        for index in range(0, len(calls), self.workers):
+            bulk_responses = self.bulk_requests(calls[index:index+self.workers])
+            for responseList in bulk_responses:
+                for response in responseList: 
+                    if response.status_code == 200:
+                        hashval = urlparse(response.url).path[1:]
+                        check = self._integrity(response.content)
+                        if check.upper() == hashval.upper():
+                            with open(f'{self.download_directory}/{hashval}', 'wb') as fout:
+                                fout.write(response.content)
+                            results.append({hashval: 'SUCCESS'})
+                        else:
+                            results.append({hashval: 'FAILED INTEGRITY CHECK'})
+                    elif response.status_code == 404:
+                        hashval = parse_qs(urlparse(response.url).query).get('hash', [])
+                        if hashval and len(hashval) > 0:
+                            results.append({hashval[0]: 'NOT FOUND'})
         return results
 
     def generate_downloads(self, hashlist):
