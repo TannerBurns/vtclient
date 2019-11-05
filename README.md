@@ -1,5 +1,6 @@
 # VTClient - VirusTotal API Client
 
+![MIT badge](https://img.shields.io/badge/license-MIT-black)
 ![Python3.7 badge](https://img.shields.io/badge/python-v3.7-blue)
 
 
