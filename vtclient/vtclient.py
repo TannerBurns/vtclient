@@ -29,14 +29,17 @@ class VTClient(VastSession):
             ",".join(hashlist[index : index + resource_chunk]) 
             for index in range(0, len(hashlist), resource_chunk)
         ]
-        calls = [
-            ('get', url, {'params': {"apikey" : self.vtkey, "resource" : group, "allinfo" : allinfo}}) 
+        parameterList = [
+            {'params': {"apikey" : self.vtkey, "resource" : group, "allinfo" : allinfo}}
             for group in resource_groups
         ]
+        reports = self.bulk_requests([('get', url, parameterList)])
         return {
-            resp.get('sha256', resp.get('resource')):resp
-            for responses in self.bulk_requests(calls)
-            for resp in responses.json()
+            report.get('sha256', report.get('resource')):report
+            for responses in self.bulk_requests([('get', url, parameterList)])
+            for resp in responses
+            if resp.status_code == 200
+            for report in resp.json()
         }
     
     def generate_reports(self, hashlist: list, allinfo: int= 1):
