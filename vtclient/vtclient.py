@@ -90,10 +90,10 @@ class VTClient(VastSession):
         if not os.path.exists(self.download_directory):
             os.makedirs(self.download_directory)
         url = "https://www.virustotal.com/intelligence/download/"
-        calls = [('get', url, [{'params': {'apikey': self.vtkey, 'hash': hashval}}]) for hashval in hashlist]
+        parameterList = [{'params': {'apikey': self.vtkey, 'hash': hashval}} for hashval in hashlist]
         results = []
-        for index in range(0, len(calls), self.workers):
-            bulk_responses = self.bulk_requests(calls[index:index+self.workers])
+        for index in range(0, len(parameterList), self.workers):
+            bulk_responses = self.bulk_requests([('get', url, parameterList[index:index+self.workers])])
             for responseList in bulk_responses:
                 for response in responseList: 
                     if response.status_code == 200:
