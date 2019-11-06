@@ -35,7 +35,7 @@
 
     hashlist = vtclient.search("tag:peexe or pedll tag:trusted positives:0")
 
-    reports = vtclient.reports(hashlist):
+    reports = vtclient.reports(hashlist)
     
     vtclient.download(hashlist)
     
