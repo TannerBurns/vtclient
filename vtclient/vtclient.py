@@ -48,8 +48,8 @@ class VTClient(VastSession):
         
     
     def generate_reports(self, hashlist: list, allinfo: int= 1) -> dict:
-        for index in range(0, len(hashlist), self.workers):
-            yield reports(hashlist[index:index+self.workers], allinfo)
+        for index in range(0, len(hashlist), self.max_async_pool):
+            yield reports(hashlist[index:index+self.max_async_pool], allinfo)
         
     def search(self, query, maxresults=None) -> list:
         hashes = []
@@ -103,8 +103,8 @@ class VTClient(VastSession):
             for hashval in hashlist
         ]
         results = []
-        for index in range(0, len(calls), self.workers):
-            bulk_responses = self.bulk_requests(calls[index:index+self.workers])
+        for index in range(0, len(calls), self.max_async_pool):
+            bulk_responses = self.bulk_requests(calls[index:index+self.max_async_pool])
             for response in bulk_responses:
                 if response.status_code == 200:
                     hashval = urlparse(response.url).path[1:]
@@ -122,5 +122,5 @@ class VTClient(VastSession):
         return results
 
     def generate_downloads(self, hashlist):
-        for index in range(0, len(hashlist), self.workers):
-            yield download(hashlist[index:index+self.workers])
+        for index in range(0, len(hashlist), self.max_async_pool):
+            yield download(hashlist[index:index+self.max_async_pool])
