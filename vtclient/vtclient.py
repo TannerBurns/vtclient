@@ -11,10 +11,9 @@ from urllib.parse import urlparse, parse_qs
 from vast.requests import VastSession
 
 class VTClient(VastSession):
-    def __init__(self, vtkey:str, download_directory:str="downloads", *args:list, **kwargs:dict):
+    def __init__(self, vtkey:str, *args:list, **kwargs:dict):
         super().__init__(*args, **kwargs)
         self.vtkey = vtkey
-        self.download_directory = os.path.join(self.basepath, download_directory)
 
     def report(self, hashval: str, allinfo: int= 1) -> dict:
         url = 'https://www.virustotal.com/vtapi/v2/file/report'
@@ -92,34 +91,33 @@ class VTClient(VastSession):
             return hashes
     
     def _integrity(self, content) -> str:
-        return hashlib.sha256(content).hexdigest() 
+        return hashlib.sha256(content).hexdigest()
 
-    def download(self, hashlist) -> list:
-        if not os.path.exists(self.download_directory):
-            os.makedirs(self.download_directory)
-        url = "https://www.virustotal.com/intelligence/download/"
-        calls = [
-            (['get', url], {'params': {'apikey': self.vtkey, 'hash': hashval}})
-            for hashval in hashlist
-        ]
-        results = []
-        for index in range(0, len(calls), self.max_async_pool):
-            bulk_responses = self.bulk_requests(calls[index:index+self.max_async_pool])
-            for response in bulk_responses:
-                if response.status_code == 200:
-                    hashval = urlparse(response.url).path[1:]
-                    check = self._integrity(response.content)
-                    if check.upper() == hashval.upper():
-                        with open(f'{self.download_directory}/{hashval}', 'wb') as fout:
-                            fout.write(response.content)
-                        results.append({hashval: 'SUCCESS'})
-                    else:
-                        results.append({hashval: 'FAILED INTEGRITY CHECK'})
-                elif response.status_code == 404:
-                    hashval = parse_qs(urlparse(response.url).query).get('hash', [])
-                    if hashval and len(hashval) > 0:
-                        results.append({hashval[0]: 'NOT FOUND'})
-        return results
+    def _download(self, hashval: str, download_directory):
+        url = "https://www.virustotal.com/vtapi/v2/file/download"
+        params = {'apikey': self.vtkey, 'hash': hashval}
+        response = self.session.get(url, params=params)
+        if response.status_code == 200:
+            hashval = urlparse(response.url).path[1:]
+            check = self._integrity(response.content)
+            if check.upper() == hashval.upper():
+                with open(os.path.join(download_directory, hashval), 'wb') as fout:
+                    fout.write(response.content)
+                return {hashval: 'SUCCESS'}
+            else:
+                return {hashval: 'FAILED INTEGRITY CHECK'}
+        elif response.status_code == 404:
+            hashval = parse_qs(urlparse(response.url).query).get('hash', [])
+            if hashval and len(hashval) > 0:
+                return {hashval[0]: 'NOT FOUND'}
+
+    def download(self, hashlist: list, download_directory: str= 'downloads') -> list:
+        download_directory = os.path.realpath(download_directory)
+        if not os.path.exists(download_directory):
+            os.makedirs(download_directory)
+        hlc = [[[hv, download_directory]] for hv in hashlist]
+        return self.run_in_eventloop(self._download, hlc)
+    
 
     def generate_downloads(self, hashlist):
         for index in range(0, len(hashlist), self.max_async_pool):
