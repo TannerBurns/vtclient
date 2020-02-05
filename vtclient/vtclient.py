@@ -50,7 +50,7 @@ class VTClient(VastSession):
         for index in range(0, len(hashlist), self.max_async_pool):
             yield reports(hashlist[index:index+self.max_async_pool], allinfo)
         
-    def search(self, query, maxresults=None) -> list:
+    def old_search(self, query, maxresults=None) -> list:
         hashes = []
         url = "https://www.virustotal.com/vtapi/v2/file/search"
         data = {"apikey" : self.vtkey, "query" : query}
@@ -69,6 +69,30 @@ class VTClient(VastSession):
             return hashes[:maxresults]
         else:
             return hashes
+    
+
+    def search(self, query, descriptors_only=True, maxresults=None) -> list:
+        search_content = []
+        url = "https://www.virustotal.com/api/v3/intelligence/search"
+        data = {"query" : query, "descriptors_only":descriptors_only, "limit":300}
+        headers = {"x-apikey": self.vtkey}
+        nextpage = url
+        while nextpage:
+            resp = self.session.get(nextpage, params=data, headers=headers)
+            if resp.status_code == 200:
+                content = resp.json()
+                if descriptors_only:
+                    search_content.extend([d.get('id') for d in content.get('data', []) if d.get('type') == 'file'])
+                else:
+                    search_content.extend([{d.get('id'): d} for d in content.get('data', []) if d and d.get('type') == 'file'])
+                if maxresults:
+                    if len(search_content) >= maxresults:
+                        return search_content[:maxresults]
+                nextpage = content.get('links', {}).get('next') if content.get('links', {}).get('next') != nextpage else None
+            else:
+                nextpage = None
+        return search_content
+    
     
     def search2(self, query, maxresults=None) -> list:
         hashes = []
