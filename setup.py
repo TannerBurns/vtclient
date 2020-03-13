@@ -5,7 +5,7 @@ with open('README.md', 'r') as fh:
 
 setuptools.setup(
     name='VTClient',  
-    version='2.0.2',
+    version='2.0.3',
     author='Tanner Burns',
     author_email='tjburns102@gmail.com',
     description='An asynchronous client for VirusTotal',
@@ -15,7 +15,7 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     include_package_data=True,
     install_requires=[
-        'vast @ https://github.com/TannerBurns/vast/archive/master.zip' 
+        'aiovast @ https://github.com/TannerBurns/aiovast/archive/master.zip'
     ],
     classifiers=[
         'Programming Language :: Python :: 3',

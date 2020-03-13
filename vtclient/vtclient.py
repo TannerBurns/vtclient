@@ -8,7 +8,7 @@ from functools import partial
 from typing import Callable, Tuple, List
 from urllib.parse import urlparse, parse_qs
 
-from vast.requests import VastSession
+from aiovast.requests import VastSession
 
 class VTClient(VastSession):
     def __init__(self, vtkey:str, *args:list, **kwargs:dict):
