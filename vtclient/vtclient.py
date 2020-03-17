@@ -48,7 +48,7 @@ class VTClient(VastSession):
     
     def generate_reports(self, hashlist: list, allinfo: int= 1) -> dict:
         for index in range(0, len(hashlist), self.max_async_pool):
-            yield reports(hashlist[index:index+self.max_async_pool], allinfo)
+            yield self.reports(hashlist[index:index+self.max_async_pool], allinfo)
         
     def old_search(self, query, maxresults=None) -> list:
         hashes = []
@@ -71,9 +71,13 @@ class VTClient(VastSession):
             return hashes
     
 
-    def search(self, query, descriptors_only=True, maxresults=None) -> list:
-        search_content = []
+    def search(self, query:str= None, hashes: list=[], descriptors_only: bool=True, maxresults: int=None) -> list:
+        if not query and not hashes:
+            print('Error: no input given to search')
+            return []
         url = "https://www.virustotal.com/api/v3/intelligence/search"
+        search_content = []
+        query = query or '\n'.join(hashes)
         data = {"query" : query, "descriptors_only":descriptors_only, "limit":300}
         headers = {"x-apikey": self.vtkey}
         nextpage = url
@@ -145,4 +149,4 @@ class VTClient(VastSession):
 
     def generate_downloads(self, hashlist):
         for index in range(0, len(hashlist), self.max_async_pool):
-            yield download(hashlist[index:index+self.max_async_pool])
+            yield self.download(hashlist[index:index+self.max_async_pool])
