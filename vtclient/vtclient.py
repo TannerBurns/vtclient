@@ -1,26 +1,24 @@
-import asyncio
 import hashlib
-import json
 import os
 
-from concurrent.futures import ThreadPoolExecutor
-from functools import partial
-from typing import Callable, Tuple, List
 from urllib.parse import urlparse, parse_qs
 
-from aiovast.requests import VastSession
+from modutils import BaseSession, aioloop
 
-class VTClient(VastSession):
+class VTClient(BaseSession):
     def __init__(self, vtkey:str, *args:list, **kwargs:dict):
         super().__init__(*args, **kwargs)
         self.vtkey = vtkey
+        self.headers.update({'x-apikey': vtkey})
+        self.max_async_pool = 16
+
 
     def report(self, hashval: str, allinfo: int= 1) -> dict:
         url = 'https://www.virustotal.com/vtapi/v2/file/report'
         params = {"apikey" : self.vtkey, "resource" : hashval, "allinfo" : allinfo}
-        response = self.session.get(url, params=params)
+        response = self.get(url, params=params)
         return {hashval: response.json() if response.status_code == 200 else response.status_code}
-    
+
     def reports(self, hashlist: list, allinfo: int= 1) -> dict:
         url = 'https://www.virustotal.com/vtapi/v2/file/report'
         resource_chunk = 24
@@ -29,11 +27,11 @@ class VTClient(VastSession):
             for index in range(0, len(hashlist), resource_chunk)
         ]
         calls = [
-            (['get', url], {'params': {"apikey" : self.vtkey, "resource" : group, "allinfo" : allinfo}})
+            [url, {'params': {"apikey" : self.vtkey, "resource" : group, "allinfo" : allinfo}}]
             for group in resource_groups
         ]
         all_reports = {}
-        for response in self.bulk_requests(calls):
+        for response in aioloop(self.get, calls):
             if response.status_code == 200:
                 report_response = response.json()
                 if type(report_response) == dict:
@@ -55,7 +53,7 @@ class VTClient(VastSession):
         url = "https://www.virustotal.com/vtapi/v2/file/search"
         data = {"apikey" : self.vtkey, "query" : query}
         while True:
-            resp = self.session.post(url, data=data)
+            resp = self.post(url, data=data)
             if resp.status_code == 200:
                 res = resp.json()
                 hashes.extend(res.get("hashes", []))
@@ -82,7 +80,7 @@ class VTClient(VastSession):
         headers = {"x-apikey": self.vtkey}
         nextpage = url
         while nextpage:
-            resp = self.session.get(nextpage, params=data, headers=headers)
+            resp = self.get(nextpage, params=data, headers=headers)
             if resp.status_code == 200:
                 content = resp.json()
                 if descriptors_only:
@@ -103,7 +101,7 @@ class VTClient(VastSession):
         url = "https://www.virustotal.com/intelligence/search/programmatic/"
         params = {"apikey" : self.vtkey, "query" : query}
         while True:
-            resp = self.session.get(url, params=params)
+            resp = self.get(url, params=params)
             if resp.status_code == 200:
                 res = resp.json()
                 hashes.extend(res.get("hashes", []))
@@ -117,14 +115,14 @@ class VTClient(VastSession):
             return hashes[:maxresults]
         else:
             return hashes
-    
+
     def _integrity(self, content) -> str:
         return hashlib.sha256(content).hexdigest()
 
     def _download(self, hashval: str, download_directory):
         url = "https://www.virustotal.com/vtapi/v2/file/download"
         params = {'apikey': self.vtkey, 'hash': hashval}
-        response = self.session.get(url, params=params)
+        response = self.get(url, params=params)
         if response.status_code == 200:
             hashval = urlparse(response.url).path[1:]
             check = self._integrity(response.content)
@@ -144,7 +142,7 @@ class VTClient(VastSession):
         if not os.path.exists(download_directory):
             os.makedirs(download_directory)
         hlc = [[[hv, download_directory]] for hv in hashlist]
-        return self.run_in_eventloop(self._download, hlc)
+        return aioloop(self._download, hlc)
     
 
     def generate_downloads(self, hashlist):
