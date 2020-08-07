@@ -3,7 +3,8 @@ import os
 
 from urllib.parse import urlparse, parse_qs
 
-from modutils import BaseSession, aioloop
+from modutils.aio import aioloop
+from modutils.http import BaseSession
 
 class VTClient(BaseSession):
     def __init__(self, vtkey:str, *args:list, **kwargs:dict):
